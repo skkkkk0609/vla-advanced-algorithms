@@ -42,8 +42,8 @@
 ## 3. PyTorch Basics 路线
 
 - [x] Quickstart：数据、模型、训练、评估、保存与加载的完整流程
-- [ ] Tensors：创建、属性、索引、切片、拼接、运算、NumPy 互操作
-- [ ] Datasets & DataLoaders：样本、batch、shuffle、迭代与自定义数据集
+- [x] Tensors：创建、属性、索引、切片、拼接、运算、NumPy 互操作
+- [x] Datasets & DataLoaders：样本、batch、shuffle、迭代与自定义数据集
 - [ ] Transforms：输入与标签预处理
 - [ ] Build Model：`nn.Module`、层、参数、forward 与设备
 - [ ] Autograd：计算图、梯度、`requires_grad`、`backward`
@@ -65,6 +65,12 @@
 - `state_dict` 保存训练参数，以及先构造模型再加载参数的原因。
 - Tensor 的 `shape`、`dtype`、`device`。
 - 整数索引会移除对应维度，范围切片会保留对应维度。
+- `torch.cat` 扩大已有维度，`torch.stack` 创建新维度，并能判断拼接后的 shape。
+- 能区分逐元素运算 `*` 与矩阵乘法 `@`，并判断二维及带 batch 矩阵乘法的输出 shape。
+- 理解广播从最后一维向前匹配，并能判断相同维度、大小为 1 和缺失维度的广播。
+- 理解 `unsqueeze` 为单个 Tensor 增加大小为 1 的维度，`squeeze` 移除大小为 1 的维度。
+- 理解 `reshape`、`view`、`flatten` 在元素总数不变的前提下调整 shape，并知道 `-1` 可自动推断维度。
+- 能使用 `transpose` 交换两个维度、使用 `permute` 重排全部维度，并区分它们与 `reshape` 的职责。
 
 ### 需要巩固
 
@@ -77,17 +83,17 @@
 
 ## 5. 当前学习位置
 
-当前文件：`beginner_source/basics/tensorqs_tutorial.py`
+当前文件：`beginner_source/basics/transforms_tutorial.py`
 
-当前主题：Tensor 索引与切片。
+当前主题：Transforms。
 
-已确认示例：
+已完成：
 
-- `actions[0]` 从 `[32,50,7]` 得到 `[50,7]`。
-- `actions[:,0]` 从 `[32,50,7]` 得到 `[32,7]`。
-- `actions[0:1]` 从 `[32,50,7]` 得到 `[1,50,7]`。
+- Quickstart：简单分类模型的完整训练、评估与保存加载流程。
+- Tensors：属性、索引、切片、拼接、广播、数学运算、维度操作、原地操作与 NumPy 互操作。
+- Datasets & DataLoaders：`__init__`、`__len__`、`__getitem__`、索引采样、shuffle、collate 与 batch 组织。
 
-下一主题：`torch.cat` 与 `torch.stack`，然后区分矩阵乘法 `@` 和逐元素乘法 `*`。
+下一主题：输入 transform 与 target transform，以及它们在 VLA processor 中的对应关系。
 
 ## 6. 进入 LeRobot 源码的门槛
 
