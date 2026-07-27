@@ -1,6 +1,6 @@
 # PyTorch 学习目标与进度
 
-最后更新：2026-07-26
+最后更新：2026-07-27
 
 ## 1. 学习目标
 
@@ -71,6 +71,10 @@
 - 理解 `unsqueeze` 为单个 Tensor 增加大小为 1 的维度，`squeeze` 移除大小为 1 的维度。
 - 理解 `reshape`、`view`、`flatten` 在元素总数不变的前提下调整 shape，并知道 `-1` 可自动推断维度。
 - 能使用 `transpose` 交换两个维度、使用 `permute` 重排全部维度，并区分它们与 `reshape` 的职责。
+- 已完成 Transforms 源码学习和 shape、dtype、数值范围及 batch 组织练习。
+- `transform` 负责处理输入特征，`target_transform` 负责处理标签，二者都在 Dataset 取样时执行。
+- `v2.ToImage()` 将 PIL/NumPy 图像转换为图像 Tensor，`v2.ToDtype(torch.float32, scale=True)` 将像素转为 float32 并缩放到 `[0, 1]`。
+- `F.one_hot` 将整数类别转为 one-hot Tensor；分类损失使用前需要确认标签格式与 loss 的要求。
 
 ### 需要巩固
 
@@ -80,6 +84,7 @@
 - `cat`、`stack`、广播、矩阵乘法和逐元素运算。
 - Dataset/DataLoader 的真实 batch 组织。
 - Autograd 和计算图。
+- 当前环境验证限制：`/usr/bin/python3` 可用，但未安装 `torch`，因此本节最小示例未能实际执行。
 
 ## 5. 当前学习位置
 

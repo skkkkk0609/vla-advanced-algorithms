@@ -44,80 +44,116 @@ flowchart TD
 
 ## 0.5 数据流：同一份信息在模型不同位置是什么类型
 
-下面按真实计算阶段展示 π0 一次训练 forward。每个节点依次写“语义对象｜物理载体｜shape”；节点所在的阶段框表示该数据此刻正由哪一段计算处理。
-
-token 是符号或语义片段，不是 Tensor；token ID 才是词表索引组成的整数 Tensor。embedding、hidden state、logits 和 velocity 都是 Float Tensor：“embedding”与“hidden state”描述语义角色和网络阶段，“Tensor”描述内存载体，两者不是互斥类别。
+下面先用极简导航定位一次训练 forward，再用六张独立小图展开。每个数据节点依次写“语义对象｜物理载体｜shape”。
 
 ```mermaid
 flowchart TD
-    subgraph S1[阶段一 Dataset原始样本]
-        TXT[任务文本｜普通字符串｜B条]
-        IMG[相机 pixels｜uint8或Float Tensor｜B乘3乘H乘W]
-        STATE[机器人 state｜Float Tensor｜B乘S]
-        ACT[真实 action｜Float Tensor｜B乘50乘A]
-    end
-
-    subgraph S2[阶段二 Processor预处理]
-        IDS[文本 token IDs｜整数 Tensor｜B乘48]
-        TMASK[文本 attention mask｜整数 mask Tensor｜B乘48]
-        PIX[resize和norm pixels｜Float Tensor｜B乘3乘224乘224]
-        NSTATE[归一化补维 state｜Float Tensor｜B乘32]
-        ACTIONS[归一化补维 actions｜Float Tensor｜B乘50乘32]
-    end
-
-    subgraph S3[阶段三 模型输入与Flow题目构造]
-        NOISE[Gaussian noise｜Float Tensor｜B乘50乘32]
-        TIME[随机 time｜Float Tensor｜B]
-        XT[带噪动作 x_t｜Float Tensor｜B乘50乘32]
-        UT[目标速度 u_t｜Float Tensor｜B乘50乘32]
-    end
-
-    subgraph S4[阶段四 Input Embedding]
-        WORD[word embeddings｜Float Tensor｜B乘48乘2048]
-        VIS[visual embeddings｜Float Tensor｜B乘Nv乘2048]
-        SEMB[state embedding｜Float Tensor｜B乘1乘1024]
-        AEMB[action-time embeddings｜Float Tensor｜B乘50乘1024]
-    end
-
-    subgraph S5[阶段五 18层联合Transformer]
-        PREFIX[prefix hidden states｜Float Tensor｜B乘Np乘2048]
-        SUFFIX[suffix hidden states｜Float Tensor｜B乘51乘1024]
-        AHID[action hidden states｜Float Tensor｜B乘50乘1024]
-    end
-
-    subgraph S6[阶段六 Output Head与Loss]
-        VT[预测速度 v_t｜Float Tensor｜B乘50乘32]
-        LOSS[MSE loss｜标量 Float Tensor｜空 shape]
-    end
-
-    TXT --> IDS --> WORD
-    TXT --> TMASK
-    IMG --> PIX --> VIS
-    STATE --> NSTATE --> SEMB
-    ACT --> ACTIONS
-    ACTIONS --> XT
-    ACTIONS --> UT
-    NOISE --> XT
-    NOISE --> UT
-    TIME --> XT
-    XT --> AEMB
-    TIME --> AEMB
-    WORD --> PREFIX
-    TMASK --> PREFIX
-    VIS --> PREFIX
-    PREFIX --> SUFFIX
-    SEMB --> SUFFIX
-    AEMB --> SUFFIX
-    SUFFIX --> AHID --> VT --> LOSS
-    UT --> LOSS
+    S1[阶段一 Dataset] --> S2[阶段二 Processor]
+    S2 --> S3[阶段三 Flow构造]
+    S3 --> S4[阶段四 Embedding]
+    S4 --> S5[阶段五 Transformer]
+    S5 --> S6[阶段六 Output与Loss]
 ```
 
-Flow Matching 题目为 `x_t = time * noise + (1 - time) * actions`，监督目标为 `u_t = noise - actions`，损失为 `mean((v_t - u_t) ** 2)`。`Np = Nv + 48`；prefix 与 suffix 在同一次 18 层 Transformer forward 中联合计算，state 是 suffix 的第一个位置，当前 `adarms_cond=None`。
+#### 阶段一：Dataset 原始样本
 
-| 易混淆术语 | 本图中的准确含义 |
+进入阶段时是机器人采集记录，离开阶段时是包含任务、视觉、状态与动作的原始样本。
+
+```mermaid
+flowchart TD
+    T[任务字符串｜普通字符串｜B条]
+    I[相机 pixels｜uint8或Float Tensor｜B乘3乘H乘W]
+    S[机器人 state｜Float Tensor｜B乘S]
+    A[真实 actions｜Float Tensor｜B乘50乘A]
+```
+
+#### 阶段二：Processor 预处理
+
+进入阶段时是 Dataset 原始样本，离开阶段时是可直接组成模型 batch 的定长 Tensor。
+
+```mermaid
+flowchart TD
+    B[原始样本｜Python dict｜B条]
+    B --> T[token IDs与mask｜整数 Tensor｜各B乘48]
+    B --> I[resize pixels｜Float Tensor｜B乘3乘224乘224]
+    B --> S[归一化补维 state｜Float Tensor｜B乘32]
+    B --> A[归一化补维 actions｜Float Tensor｜B乘50乘32]
+```
+
+#### 阶段三：Flow 题目构造
+
+进入阶段时是归一化 actions，离开阶段时是模型输入 `x_t` 与监督目标 `u_t`。
+
+```mermaid
+flowchart TD
+    A[归一化 actions｜Float Tensor｜B乘50乘32]
+    N[Gaussian noise｜Float Tensor｜B乘50乘32]
+    T[随机 time｜Float Tensor｜B]
+    A --> X[带噪动作 x_t｜Float Tensor｜B乘50乘32]
+    N --> X
+    T --> X
+    A --> U[目标速度 u_t｜Float Tensor｜B乘50乘32]
+    N --> U
+```
+
+Flow Matching 题目为 `x_t = time * noise + (1 - time) * actions`，监督目标为 `u_t = noise - actions`。
+
+#### 阶段四：Input Embedding
+
+进入阶段时是 Processor Tensor 与 Flow 输入，离开阶段时是送入联合 Transformer 的四类 embedding。
+
+```mermaid
+flowchart TD
+    T[word embeddings｜Float Tensor｜B乘48乘2048]
+    I[resize pixels｜Float Tensor｜B乘3乘224乘224]
+    I --> F[vision features｜Float Tensor｜B乘Nv乘Dv]
+    F --> V[visual embeddings｜Float Tensor｜B乘Nv乘2048]
+    S[state embedding｜Float Tensor｜B乘1乘1024]
+    A[action-time embeddings｜Float Tensor｜B乘50乘1024]
+```
+
+#### 阶段五：18 层联合 Transformer
+
+进入阶段时是 word、visual、state 与 action-time embeddings，离开阶段时是上下文化的 prefix、suffix 与 action hidden states。
+
+```mermaid
+flowchart TD
+    W[word embeddings｜Float Tensor｜B乘48乘2048]
+    V[visual embeddings｜Float Tensor｜B乘Nv乘2048]
+    S[state embedding｜Float Tensor｜B乘1乘1024]
+    A[action-time embeddings｜Float Tensor｜B乘50乘1024]
+    W --> J[18层联合 Transformer｜prefix主干加Action Expert]
+    V --> J
+    S --> J
+    A --> J
+    J --> P[prefix hidden states｜Float Tensor｜B乘Np乘2048]
+    J --> U[suffix hidden states｜Float Tensor｜B乘51乘1024]
+    U --> H[action hidden states｜取后50位置｜B乘50乘1024]
+```
+
+`Np = Nv + 48`。prefix 与 suffix 在同一次 18 层 Transformer forward 中联合计算；state 是 suffix 的第一个位置，当前 `adarms_cond=None`。
+
+#### 阶段六：Output Head 与 Loss
+
+进入阶段时是 action hidden states 与目标 `u_t`，离开阶段时是预测速度 `v_t` 和标量 MSE loss。
+
+```mermaid
+flowchart TD
+    H[action hidden states｜Float Tensor｜B乘50乘1024]
+    H --> V[预测速度 v_t｜Float Tensor｜B乘50乘32]
+    U[目标速度 u_t｜Float Tensor｜B乘50乘32]
+    V --> L[MSE loss｜标量 Float Tensor｜空 shape]
+    U --> L
+```
+
+损失为 `mean((v_t - u_t) ** 2)`。
+
+特别要注意：token 是符号或语义片段，不是 Tensor；token ID 才是整数 Tensor。embedding 和 hidden state 仍是 Float Tensor，前者与后者描述网络阶段角色，Tensor 描述物理载体。
+
+| 易混淆术语 | 准确含义 |
 |---|---|
 | token 与 token ID | token 是符号片段；token ID 是整数 Tensor |
-| embedding 与 hidden state | 都是 Float Tensor，分别表示网络输入表征与 Transformer 上下文化表征 |
+| embedding 与 hidden state | 都是 Float Tensor；前者是网络输入表征，后者是 Transformer 上下文化表征 |
 | prefix 与 suffix | prefix 承载图像和文本；suffix 承载 state 和 action-time |
 | `x_t`、`u_t`、`v_t` | 都是 Float Tensor，依次是模型输入、监督目标和模型预测 |
 
@@ -125,199 +161,183 @@ Flow Matching 题目为 `x_t = time * noise + (1 - time) * actions`，监督目�
 
 #### 文本数据流
 
+文本从普通字符串变成 token 符号，再变成整数 ID、Float embedding 和上下文化 hidden state。
+
 ```mermaid
 flowchart TD
-    subgraph T1[原始数据]
-        TEXT[任务描述｜普通字符串｜B条]
-    end
-    subgraph T2[Tokenizer]
-        TOKENS[token符号序列｜符号序列｜B组]
-        TIDS[token IDs｜整数 Tensor｜B乘48]
-        MASK[attention mask｜整数 mask Tensor｜B乘48]
-    end
-    subgraph T3[Embedding]
-        LOOKUP[embedding lookup｜查表操作｜词表到2048维]
-        WORDS[word embeddings｜Float Tensor｜B乘48乘2048]
-    end
-    subgraph T4[Transformer]
-        CONTEXT[contextual hidden states｜Float Tensor｜B乘48乘2048]
-    end
-    subgraph T5[条件输出]
-        TCOND[文本 prefix 条件｜Float Tensor｜B乘48乘2048]
-    end
-
-    TEXT --> TOKENS --> TIDS --> LOOKUP --> WORDS --> CONTEXT --> TCOND
-    TEXT --> MASK --> CONTEXT
+    S[任务描述｜普通字符串｜B条]
+    S -- Tokenizer阶段 --> T[token符号｜符号序列｜B组]
+    T -- 编码阶段 --> I[token IDs｜整数 Tensor｜B乘48]
+    I -- 查表阶段 --> E[word embeddings｜Float Tensor｜B乘48乘2048]
+    E --> J[18层 prefix Transformer｜Float Tensor计算]
+    J --> H[文本 hidden state｜Float Tensor｜B乘48乘2048]
 ```
 
-| 易混淆术语 | 本图中的准确含义 |
-|---|---|
-| string | 原始普通字符串，不是 Tensor |
-| token | Tokenizer 切出的符号或语义片段，不是 Tensor |
-| token IDs | token 对应的词表索引，是整数 Tensor |
-| word embedding与hidden state | 都是 Float Tensor；前者是查表结果，后者已被上下文化 |
+attention mask 与 token IDs 同时产生，载体为整数 mask Tensor，shape 为 `B乘48`，并在 Transformer 阶段约束注意力。
+
+| 阶段 | 进入时 | 离开时 |
+|---|---|---|
+| Tokenizer | 任务普通字符串 | token 符号序列 |
+| 编码 | token 符号序列 | token IDs 与 attention mask |
+| Embedding | 整数 token IDs | Float word embeddings |
+| Transformer | word embeddings | 文本 hidden state |
 
 #### 图像数据流
 
+图像从相机 pixels 变成 Processor Float Tensor，再依次变成 vision features、visual embeddings 和视觉 hidden state。
+
 ```mermaid
 flowchart TD
-    subgraph I1[相机与Processor阶段]
-        CAMERA[相机 pixels｜uint8或Float Tensor｜B乘3乘H乘W]
-        RPIX[resize和norm pixels｜Float Tensor｜B乘3乘224乘224]
-        CAMMASK[相机有效标记｜布尔 Tensor｜B]
-    end
-    subgraph I2[Vision Encoder阶段]
-        PATCHPOS[patch序列位置｜内部序列｜Nv个]
-        VFEAT[vision features｜Float Tensor｜B乘Nv乘Dv]
-    end
-    subgraph I3[Projector与Mask阶段]
-        VEMB[visual embeddings｜Float Tensor｜B乘Nv乘2048]
-        VMASK[visual token mask｜布尔 Tensor｜B乘Nv]
-    end
-    subgraph I4[Transformer阶段]
-        VHID[视觉 prefix hidden states｜Float Tensor｜B乘Nv乘2048]
-    end
-
-    CAMERA --> RPIX --> VFEAT
-    PATCHPOS --> VFEAT --> VEMB --> VHID
-    CAMMASK --> VMASK --> VHID
+    P[相机 pixels｜uint8或Float Tensor｜B乘3乘H乘W]
+    P -- Processor阶段 --> R[resize pixels｜Float Tensor｜B乘3乘224乘224]
+    R -- SigLIP阶段 --> F[vision features｜Float Tensor｜B乘Nv乘Dv]
+    F -- Projector阶段 --> E[visual embeddings｜Float Tensor｜B乘Nv乘2048]
+    E --> J[18层 prefix Transformer｜Float Tensor计算]
+    J --> H[视觉 hidden state｜Float Tensor｜B乘Nv乘2048]
 ```
 
-| 易混淆术语 | 本图中的准确含义 |
-|---|---|
-| pixels | 相机侧可为 uint8 或 Float Tensor；resize和norm后是 Float Tensor |
-| patch | Vision Encoder 的内部序列位置，不是文本 token |
-| vision features | Vision Encoder 输出的 Float Tensor |
-| visual embeddings | Projector 输出的 Float Tensor，不存在整数 visual token ID |
+相机有效标记从布尔 Tensor `B` 扩展为 visual token mask `B乘Nv`，与 visual embeddings 一同进入 Transformer；视觉路径不存在整数 visual token ID。
+
+| 阶段 | 进入时 | 离开时 |
+|---|---|---|
+| Processor | 原始相机 pixels | resize 与归一化 Float Tensor |
+| Vision Encoder | Processor pixels | vision features |
+| Projector | vision features | visual embeddings |
+| Transformer | visual embeddings 与 mask | 视觉 prefix hidden state |
 
 #### State 数据流
 
+state 以连续 Float Tensor 进入，经过归一化与补维后形成 state embedding，最后成为 suffix 中的 state hidden state。
+
 ```mermaid
 flowchart TD
-    subgraph ST1[Dataset]
-        SRAW[关节与夹爪 state｜Float Tensor｜B乘S]
-    end
-    subgraph ST2[Processor]
-        SNORM[归一化 state｜Float Tensor｜B乘S]
-        SPAD[补维 state｜Float Tensor｜B乘32]
-    end
-    subgraph ST3[Projection]
-        SEMB2[state embedding｜Float Tensor｜B乘1乘1024]
-    end
-    subgraph ST4[Transformer]
-        SHID[state hidden state｜Float Tensor｜B乘1乘1024]
-    end
-
-    SRAW --> SNORM --> SPAD --> SEMB2 --> SHID
+    S[关节与夹爪 state｜Float Tensor｜B乘S]
+    S -- 归一化阶段 --> N[归一化 state｜Float Tensor｜B乘S]
+    N -- 补维阶段 --> P[补维 state｜Float Tensor｜B乘32]
+    P -- Projection阶段 --> E[state embedding｜Float Tensor｜B乘1乘1024]
+    E --> J[18层 Action Expert Transformer｜Float Tensor计算]
+    J --> H[state hidden state｜Float Tensor｜B乘1乘1024]
 ```
 
-| 易混淆术语 | 本图中的准确含义 |
-|---|---|
-| state | 连续机器人观测，全程是 Float Tensor，不经过 tokenizer |
-| state embedding | `state_proj` 的 Float Tensor 输出，是 suffix 输入 |
-| state hidden state | 18 层联合 Transformer 后的 Float Tensor，仍位于 suffix |
+| 阶段 | 进入时 | 离开时 |
+|---|---|---|
+| Processor 归一化 | 连续原始 state | 归一化 state |
+| Processor 补维 | `B乘S` Float Tensor | `B乘32` Float Tensor |
+| Projection | 补维 state | suffix 的 state embedding |
+| Transformer | state embedding | state hidden state |
 
 #### 训练 action 数据流
 
+训练 action 从真实动作变成 Flow 输入与监督目标，再由 Transformer 预测速度并计算标量损失。
+
+##### Flow 题目构造
+
+进入时是真实 action，离开时是带噪模型输入 `x_t` 与目标速度 `u_t`。
+
 ```mermaid
 flowchart TD
-    subgraph A1[Dataset和Flow构造]
-        ARAW2[真实 action｜Float Tensor｜B乘50乘A]
-        ACTION2[归一化 actions｜Float Tensor｜B乘50乘32]
-        NOISE2[Gaussian noise｜Float Tensor｜B乘50乘32]
-        TIME2[随机 time｜Float Tensor｜B]
-        XT2[模型输入 x_t｜Float Tensor｜B乘50乘32]
-        UT2[监督目标 u_t｜Float Tensor｜B乘50乘32]
-    end
-    subgraph A2[Input Projection]
-        APROJ[action projection｜Float Tensor｜B乘50乘1024]
-        TEMB[time embedding｜Float Tensor｜B乘1024]
-        ATEMB[action-time embedding｜Float Tensor｜B乘50乘1024]
-    end
-    subgraph A3[Transformer]
-        PIN[prefix条件输入｜Float Tensor｜B乘Np乘2048]
-        SIN[suffix输入｜Float Tensor｜B乘51乘1024]
-        AHIDDEN[action hidden states｜Float Tensor｜B乘50乘1024]
-    end
-    subgraph A4[Output和Loss]
-        VT2[预测速度 v_t｜Float Tensor｜B乘50乘32]
-        MSE[MSE loss｜标量 Float Tensor｜空 shape]
-    end
-
-    ARAW2 --> ACTION2
-    ACTION2 --> XT2
-    ACTION2 --> UT2
-    NOISE2 --> XT2
-    NOISE2 --> UT2
-    TIME2 --> XT2
-    XT2 --> APROJ --> ATEMB
-    TIME2 --> TEMB --> ATEMB
-    PIN --> SIN
-    ATEMB --> SIN --> AHIDDEN --> VT2 --> MSE
-    UT2 --> MSE
+    R[真实 action｜Float Tensor｜B乘50乘A]
+    R -- Processor阶段 --> A[归一化补维 actions｜Float Tensor｜B乘50乘32]
+    N[Gaussian noise｜Float Tensor｜B乘50乘32]
+    T[随机 time｜Float Tensor｜B]
+    A -- Flow构造阶段 --> X[模型输入 x_t｜Float Tensor｜B乘50乘32]
+    N --> X
+    T --> X
+    A --> U[监督目标 u_t｜Float Tensor｜B乘50乘32]
+    N --> U
 ```
 
-`x_t = time * noise + (1 - time) * actions`；`u_t = noise - actions`；`loss = mean((v_t - u_t) ** 2)`。time 的 sinusoidal embedding 与 action projection 经拼接和 MLP 形成 action-time embedding；只有 action 位置参与速度预测和 MSE。
+`x_t = time * noise + (1 - time) * actions`；`u_t = noise - actions`。
 
-| 易混淆术语 | 本图中的准确含义 |
-|---|---|
-| `x_t` | Flow 插值得到的模型输入，是 Float Tensor |
-| `u_t` | 由 noise 与 actions 构造的监督目标，是 Float Tensor |
-| action embedding与hidden state | 都是 Float Tensor；分别位于投影后和 Transformer 后 |
-| `v_t`与loss | `v_t` 是 Float Tensor；归约后的 loss 是标量 Float Tensor |
+##### 模型计算与监督
+
+进入时是 `x_t`、time 与条件 embedding，离开时是 `v_t` 和标量 MSE loss。
+
+```mermaid
+flowchart TD
+    X[模型输入 x_t｜Float Tensor｜B乘50乘32]
+    T[随机 time｜Float Tensor｜B]
+    X -- Projection阶段 --> E[action-time embedding｜Float Tensor｜B乘50乘1024]
+    T --> E
+    E --> J[18层联合 Transformer｜prefix与Action Expert]
+    J --> H[action hidden states｜Float Tensor｜B乘50乘1024]
+    H -- Output Head阶段 --> V[预测速度 v_t｜Float Tensor｜B乘50乘32]
+    U[监督目标 u_t｜Float Tensor｜B乘50乘32]
+    V -- Loss阶段 --> L[MSE loss｜标量 Float Tensor｜空 shape]
+    U --> L
+```
+
+time 的 sinusoidal embedding 与 action projection 经拼接和 MLP 形成 action-time embedding；prefix 与 state 条件也进入联合 Transformer。只有 action 位置参与速度预测，损失为 `mean((v_t - u_t) ** 2)`。
+
+| 阶段 | 进入时 | 离开时 |
+|---|---|---|
+| Processor | 真实 action | 归一化补维 actions |
+| Flow 题目构造 | actions、noise、time | `x_t` 与 `u_t` |
+| Projection | `x_t` 与 time | action-time embedding |
+| Transformer | 条件与 action-time embedding | action hidden states |
+| Output 与 Loss | action hidden states 与 `u_t` | `v_t` 与标量 MSE loss |
 
 #### 推理 action 数据流
 
+推理从观测条件与随机噪声开始，经过固定参数的 10 步 Transformer 积分，最终生成并逐帧执行 action chunk。
+
+##### 条件准备与初始化
+
+进入时是图像、文本、state 观测，离开时是可复用条件与初始噪声 `x_t`。
+
 ```mermaid
 flowchart TD
-    subgraph P1[Observation条件准备]
-        OIMG[图像条件｜Float Tensor｜B乘3乘224乘224]
-        OTXT[文本 token IDs｜整数 Tensor｜B乘48]
-        OSTATE[state条件｜Float Tensor｜B乘32]
-        PKV[prefix KV｜KV Tensor cache｜18层]
-        SCOND[state embedding｜Float Tensor｜B乘1乘1024]
-    end
-    subgraph P2[Flow初始化]
-        XINIT[初始 x_t 噪声语义｜Float Tensor｜B乘50乘32]
-        TIMES[积分 time序列｜Float Tensor｜11个边界]
-    end
-    subgraph P3[10步Transformer积分]
-        AIN[action-time embedding｜Float Tensor｜B乘50乘1024]
-        PHID[suffix hidden states｜Float Tensor｜B乘51乘1024]
-        VSTEP[预测速度 v_t｜Float Tensor｜B乘50乘32]
-        XNEXT[更新后 x_t 动作语义｜Float Tensor｜B乘50乘32]
-        STEP{已完成10步}
-    end
-    subgraph P4[Postprocessor]
-        PADACT[最终归一化 action｜Float Tensor｜B乘50乘32]
-        REALACT[反归一化 action｜Float Tensor｜B乘50乘A]
-        CPUACT[CPU动作帧｜Float Tensor on CPU｜50乘A]
-    end
-    subgraph P5[控制执行]
-        QUEUE[action queue｜deque｜50帧]
-        COMMAND[硬件命令｜数值数组或协议对象｜A维]
-    end
-
-    OIMG --> PKV
-    OTXT --> PKV
-    OSTATE --> SCOND
-    XINIT --> AIN
-    TIMES --> AIN
-    PKV --> PHID
-    SCOND --> PHID
-    AIN --> PHID --> VSTEP --> XNEXT --> STEP
-    STEP -- 未完成 --> AIN
-    STEP -- 已完成 --> PADACT --> REALACT --> CPUACT --> QUEUE --> COMMAND
+    I[图像条件｜Float Tensor｜B乘3乘224乘224]
+    T[文本 token IDs｜整数 Tensor｜B乘48]
+    S[state条件｜Float Tensor｜B乘32]
+    I -- Prefix阶段 --> K[prefix KV｜KV Tensor cache｜18层]
+    T --> K
+    S -- Projection阶段 --> E[state embedding｜Float Tensor｜B乘1乘1024]
+    N[初始噪声 x_t｜Float Tensor｜B乘50乘32]
 ```
 
-每步执行 `x_t = x_t + dt * v_t`。同一个 Float Tensor 变量 `x_t` 在 10 步中从噪声语义逐渐变为动作语义；更新的是 `x_t`，模型参数保持不变。prefix KV 只计算一次并作为 Tensor cache 复用，10 步只重算 suffix；推理没有 `u_t`、loss、反向传播或参数更新。
+##### 10 步 Transformer 积分
 
-| 易混淆术语 | 本图中的准确含义 |
-|---|---|
-| `x_t` | shape 与载体不变，10 步更新中语义由噪声过渡到动作 |
-| 模型参数 | 10 步内固定；变化的是 `x_t`，不是权重 |
-| prefix KV | 18 层的 KV Tensor cache，供每一步 suffix 复用 |
-| deque | CPU 侧 Python 队列，逐帧取出动作并转换为硬件命令 |
+进入时是 prefix KV、state embedding 与当前 `x_t`，离开时是逐渐具有动作语义的最终 `x_t`。
+
+```mermaid
+flowchart TD
+    X[当前 x_t｜Float Tensor｜B乘50乘32]
+    T[当前 time｜Float Tensor｜B]
+    X -- Embedding阶段 --> E[action-time embedding｜Float Tensor｜B乘50乘1024]
+    T --> E
+    E --> J[每一步调用联合 Transformer｜复用 prefix KV]
+    J --> H[action hidden states｜Float Tensor｜B乘50乘1024]
+    H -- Output Head阶段 --> V[预测速度 v_t｜Float Tensor｜B乘50乘32]
+    V -- Euler更新阶段 --> N[下一步 x_t｜Float Tensor｜B乘50乘32]
+    N -- 共10步 --> X
+```
+
+每步执行 `x_t = x_t + dt * v_t`，其中 `dt = -0.1`，time 从 `1.0` 走到 `0.1`。prefix KV 在 10 步中复用，state embedding 与 action-time embedding 构成 suffix；模型参数保持不变，只更新 `x_t`。
+
+##### 后处理与执行
+
+进入时是积分结束的归一化 action，离开时是逐帧下发的硬件命令。
+
+```mermaid
+flowchart TD
+    A[归一化 action｜Float Tensor｜B乘50乘32]
+    A -- 裁维阶段 --> C[原始维度 action｜Float Tensor｜B乘50乘A]
+    C -- 反归一化阶段 --> R[真实尺度 action｜Float Tensor｜B乘50乘A]
+    R -- CPU阶段 --> F[CPU动作帧｜Float Tensor on CPU｜50乘A]
+    F -- Queue阶段 --> Q[action queue｜deque｜50帧]
+    Q -- 执行阶段 --> H[硬件命令｜数值数组或协议对象｜A维]
+```
+
+推理没有 `u_t`、loss、反向传播或参数更新。
+
+| 阶段 | 进入时 | 离开时 |
+|---|---|---|
+| 条件准备 | 图像、文本、state | prefix KV 与 state embedding |
+| Flow 初始化 | 随机噪声 | 初始 `x_t` |
+| 10 步积分 | 条件与当前 `x_t` | 最终归一化 action |
+| Postprocessor | `B乘50乘32` action | `B乘50乘A` 真实尺度 action |
+| 控制执行 | CPU action chunk | deque 中逐帧硬件命令 |
 
 ### 原理：batch 入口长什么样？
 
