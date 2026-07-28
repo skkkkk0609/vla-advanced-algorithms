@@ -88,21 +88,18 @@
 
 ## 5. 当前学习位置
 
-当前文件：`lerobot_policy_code/act/configuration_act.py`
+当前文件：`lerobot_source/lerobot/policies/pi0/modeling_pi0.py`
 
-当前主题：依次通读 ACT、SmolVLA、π0、π0.5 的 LeRobot policy 源码；不再进行问答考核，以调用链、模块职责和 Tensor shape 为主。
-
-源码副本：`lerobot_policy_code/{act,smolvla,pi0,pi05}`，与 `D:/lerobot/src/lerobot/policies/` 原文件哈希一致。
+当前主题：LeRobot Pi0 与 Pi0.5 实现对比。
 
 已完成：
 
-- Quickstart：简单分类模型的完整训练、评估与保存加载流程。
-- Tensors：属性、索引、切片、拼接、广播、数学运算、维度操作、原地操作与 NumPy 互操作。
-- Datasets & DataLoaders：`__init__`、`__len__`、`__getitem__`、索引采样、shuffle、collate 与 batch 组织。
-- Transforms：输入与标签预处理。
-- Build Model：`nn.Module`、层、参数、`forward` 与设备。
+- PyTorch Basics 全部路线：数据、Tensor、Transform、模型、Autograd、优化及保存加载。
+- 已从 `/home/robot/projects/lerobot` 复制 Pi0、Pi0.5 和共享 `pi_gemma.py` 实现。
+- 已定位配置、processor、训练 `forward()`、Flow Matching loss、推理去噪和 `select_action()` 调用链。
+- 已确认 Pi0 单独投影连续 state；Pi0.5 将归一化 state 离散化后拼入语言 prompt，并使用时间条件 AdaRMS。
 
-下一主题：理解前向计算图，以及 `loss.backward()` 如何将梯度写入参数的 `.grad`。
+下一主题：从 Pi0 的 processor 输入开始，逐步跟踪一个 batch 到训练 loss 的 Tensor shape。
 
 ## 6. 进入 LeRobot 源码的门槛
 
