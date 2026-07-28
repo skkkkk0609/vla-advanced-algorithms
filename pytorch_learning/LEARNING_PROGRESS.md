@@ -44,12 +44,12 @@
 - [x] Quickstart：数据、模型、训练、评估、保存与加载的完整流程
 - [x] Tensors：创建、属性、索引、切片、拼接、运算、NumPy 互操作
 - [x] Datasets & DataLoaders：样本、batch、shuffle、迭代与自定义数据集
-- [ ] Transforms：输入与标签预处理
-- [ ] Build Model：`nn.Module`、层、参数、forward 与设备
-- [ ] Autograd：计算图、梯度、`requires_grad`、`backward`
-- [ ] Optimization：训练循环、loss、optimizer 与超参数
-- [ ] Save & Load：`state_dict`、checkpoint 与推理恢复
-- [ ] Basics 总复盘：能沿 `data -> forward -> loss -> backward -> optimizer` 解释代码
+- [x] Transforms：输入与标签预处理
+- [x] Build Model：`nn.Module`、层、参数、forward 与设备
+- [x] Autograd：计算图、梯度、`requires_grad`、`backward`
+- [x] Optimization：训练循环、loss、optimizer 与超参数
+- [x] Save & Load：`state_dict`、checkpoint 与推理恢复
+- [x] Basics 总复盘：能沿 `data -> forward -> loss -> backward -> optimizer` 解释代码
 
 ## 4. 当前掌握情况
 
@@ -83,17 +83,21 @@
 
 ## 5. 当前学习位置
 
-当前文件：`beginner_source/basics/transforms_tutorial.py`
+当前文件：`lerobot_policy_code/act/configuration_act.py`
 
-当前主题：Transforms。
+当前主题：依次通读 ACT、SmolVLA、π0、π0.5 的 LeRobot policy 源码；不再进行问答考核，以调用链、模块职责和 Tensor shape 为主。
+
+源码副本：`lerobot_policy_code/{act,smolvla,pi0,pi05}`，与 `D:/lerobot/src/lerobot/policies/` 原文件哈希一致。
 
 已完成：
 
 - Quickstart：简单分类模型的完整训练、评估与保存加载流程。
 - Tensors：属性、索引、切片、拼接、广播、数学运算、维度操作、原地操作与 NumPy 互操作。
 - Datasets & DataLoaders：`__init__`、`__len__`、`__getitem__`、索引采样、shuffle、collate 与 batch 组织。
+- Transforms：输入与标签预处理。
+- Build Model：`nn.Module`、层、参数、`forward` 与设备。
 
-下一主题：输入 transform 与 target transform，以及它们在 VLA processor 中的对应关系。
+下一主题：理解前向计算图，以及 `loss.backward()` 如何将梯度写入参数的 `.grad`。
 
 ## 6. 进入 LeRobot 源码的门槛
 
@@ -110,8 +114,8 @@
 
 ### ACT
 
-- [ ] 找到实际训练命令并解释参数
-- [ ] 找到配置类和数据集入口
+- [x] 找到实际训练命令并解释参数
+- [x] 找到配置类和数据集入口
 - [ ] 查看真实 batch
 - [ ] 跟踪 ACT forward 与动作输出 shape
 - [ ] 找到重建损失、KL loss 和总 loss
