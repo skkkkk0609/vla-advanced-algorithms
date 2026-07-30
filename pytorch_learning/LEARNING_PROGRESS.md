@@ -1,6 +1,6 @@
 # PyTorch 学习目标与进度
 
-最后更新：2026-07-27
+最后更新：2026-07-30
 
 ## 1. 学习目标
 
@@ -75,6 +75,12 @@
 - `transform` 负责处理输入特征，`target_transform` 负责处理标签，二者都在 Dataset 取样时执行。
 - `v2.ToImage()` 将 PIL/NumPy 图像转换为图像 Tensor，`v2.ToDtype(torch.float32, scale=True)` 将像素转为 float32 并缩放到 `[0, 1]`。
 - `F.one_hot` 将整数类别转为 one-hot Tensor；分类损失使用前需要确认标签格式与 loss 的要求。
+- 已按源码顺序完成 `configuration_pi0.py`：动作 chunk、Flow Matching 时间、相对动作、RTC、图像尺寸、归一化、训练/微调、优化器、调度器、token 长度、配置校验和 feature 定义。
+- 理解 Beta 分布参数决定形状而非取值范围，概率密度可以大于 1，但区间积分必须是合法概率。
+- 理解 `sample_beta()` 不是从数据集抽样，而是为 batch 中每条已有训练数据随机指定 Flow Matching 噪声时间。
+- 理解冻结视觉编码器不等于忽略图像：图像仍产生随输入变化的特征，只是不更新视觉编码器参数。
+- 已完成 `modeling_pi0.py` 整体模块和训练/推理调用链浏览，明确 Transformer 位于 PaliGemma 和 Gemma Action Expert 内部。
+- 已学习 `ActionSelectKwargs`、`get_safe_dtype()`、`create_sinusoidal_pos_embedding()` 和 `sample_beta()` 的职责及调用关系。
 
 ### 需要巩固
 
@@ -84,13 +90,17 @@
 - `cat`、`stack`、广播、矩阵乘法和逐元素运算。
 - Dataset/DataLoader 的真实 batch 组织。
 - Autograd 和计算图。
+- Python 字典的键和值、`TypedDict`、`field(default_factory=...)` 和局部变量。
+- 正弦时间编码中的 `fraction`、`period`、广播和高维 embedding 计算细节。
+- PaliGemma Transformer 与 Action Expert Transformer 的逐层联合 Attention 实现。
+- 区分“从数据集抽取 batch”“随机生成 noise”和“为每个样本采样时间 t”。
 - 当前环境验证限制：`/usr/bin/python3` 可用，但未安装 `torch`，因此本节最小示例未能实际执行。
 
 ## 5. 当前学习位置
 
 当前文件：`lerobot_source/lerobot/policies/pi0/modeling_pi0.py`
 
-当前主题：LeRobot Pi0 与 Pi0.5 实现对比。
+当前主题：按源码顺序模块化学习 LeRobot Pi0 的 `modeling_pi0.py`。
 
 已完成：
 
@@ -98,8 +108,11 @@
 - 已从 `/home/robot/projects/lerobot` 复制 Pi0、Pi0.5 和共享 `pi_gemma.py` 实现。
 - 已定位配置、processor、训练 `forward()`、Flow Matching loss、推理去噪和 `select_action()` 调用链。
 - 已确认 Pi0 单独投影连续 state；Pi0.5 将归一化 state 离散化后拼入语言 prompt，并使用时间条件 AdaRMS。
+- 已完成 `configuration_pi0.py` 全文件学习。
+- 已浏览 `modeling_pi0.py` 的全部 1332 行并划分八个学习模块。
+- 已完成模块 1 的整体梳理：推理参数类型、硬件安全 dtype、正弦时间编码和 Beta 时间采样。
 
-下一主题：从 Pi0 的 processor 输入开始，逐步跟踪一个 batch 到训练 loss 的 Tensor shape。
+下一主题：模块 2，从 `make_att_2d_masks()` 开始学习 Attention mask、KV cache 和向量 padding。
 
 ## 6. 进入 LeRobot 源码的门槛
 
