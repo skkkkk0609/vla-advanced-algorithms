@@ -81,6 +81,9 @@
 - 理解冻结视觉编码器不等于忽略图像：图像仍产生随输入变化的特征，只是不更新视觉编码器参数。
 - 已完成 `modeling_pi0.py` 整体模块和训练/推理调用链浏览，明确 Transformer 位于 PaliGemma 和 Gemma Action Expert 内部。
 - 已学习 `ActionSelectKwargs`、`get_safe_dtype()`、`create_sinusoidal_pos_embedding()` 和 `sample_beta()` 的职责及调用关系。
+- 已完成模块 2：理解 `make_att_2d_masks()` 如何由 `[B,N]` 生成 token 两两访问权限 `[B,N,N]`，以及 `clone_past_key_values()`、`pad_vector()` 的作用。
+- 已完成模块 3：理解 `resize_with_pad_torch()` 如何识别通道位置、等比例缩放、计算四边 padding，并保持全局相机完整视野。
+- 已进入模块 4：理解 `compute_layer_complete()` 配对 PaliGemma 与 Action Expert 同层计算，当前已学到 LayerNorm、Q/K/V 投影、多头 shape 和 prefix/suffix 沿 token 维拼接。
 
 ### 需要巩固
 
@@ -94,6 +97,8 @@
 - 正弦时间编码中的 `fraction`、`period`、广播和高维 embedding 计算细节。
 - PaliGemma Transformer 与 Action Expert Transformer 的逐层联合 Attention 实现。
 - 区分“从数据集抽取 batch”“随机生成 noise”和“为每个样本采样时间 t”。
+- Attention Mask 与真正 Attention 权重计算的区别，以及 Query 行、Key 列和广播形成二维权限矩阵的过程。
+- DynamicCache 的可变更新行为：固定 prefix KV 与每轮临时 suffix KV 的关系。
 - 当前环境验证限制：`/usr/bin/python3` 可用，但未安装 `torch`，因此本节最小示例未能实际执行。
 
 ## 5. 当前学习位置
@@ -112,7 +117,7 @@
 - 已浏览 `modeling_pi0.py` 的全部 1332 行并划分八个学习模块。
 - 已完成模块 1 的整体梳理：推理参数类型、硬件安全 dtype、正弦时间编码和 Beta 时间采样。
 
-下一主题：模块 2，从 `make_att_2d_masks()` 开始学习 Attention mask、KV cache 和向量 padding。
+下一主题：继续模块 4，从拼接后的 Q/K/V 开始学习 RoPE 位置编码、联合 Attention、输出拆分、残差连接与 MLP。
 
 ## 6. 进入 LeRobot 源码的门槛
 
